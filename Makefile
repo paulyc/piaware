@@ -22,7 +22,8 @@ install:
 	$(MAKE) -C programs/pirehose install
 	$(MAKE) -C doc install
 	$(MAKE) -C scripts install
-	$(MAKE) -C etc install
+# no sudoers - security hazard
+#	$(MAKE) -C etc install
 
 clean:
 	$(MAKE) -C package clean
