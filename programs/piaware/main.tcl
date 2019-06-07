@@ -21,7 +21,9 @@ if {![info exists ::launchdir]} {
 
 source $::launchdir/config.tcl
 source $::launchdir/helpers.tcl
+source $::launchdir/faup.tcl
 source $::launchdir/faup1090.tcl
+source $::launchdir/faup978.tcl
 source $::launchdir/health.tcl
 source $::launchdir/mlat.tcl
 source $::launchdir/pirehose.tcl
@@ -67,7 +69,6 @@ proc main {{argv ""}} {
 	interp bgerror {} log_bgerror
 
 	setup_config
-	setup_faup1090_vars
 
 	# setup adept client early so logger command won't trace back
 	# (this does not initiate a connection, it just creates the object)
@@ -88,7 +89,9 @@ proc main {{argv ""}} {
 
 	greetings
 
-	connect_to_gpsd
+	if {[piawareConfig get use-gpsd]} {
+		connect_to_gpsd
+	}
 
 	# we stagger this a little to let
 	#  1) gpsd give us a location if it's going to (typically takes up to 1 second to do this)
@@ -96,8 +99,10 @@ proc main {{argv ""}} {
 	#  3) fire up faup1090 with the new position
 	after 1500 adept connect
 	after 3000 connect_adsb_via_faup1090
+	after 3000 connect_uat_via_faup978
 	after 3500 start_pirehose
 	after 4500 periodically_check_adsb_traffic
+	after 4500 periodically_check_uat_traffic
 	after 30000 periodically_send_health_information
 
     catch {vwait die}

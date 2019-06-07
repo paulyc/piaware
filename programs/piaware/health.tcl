@@ -14,7 +14,7 @@ proc construct_health_array {_row} {
 			set row(disk-$mountpoint) $usage
 		}
 	}
-	catch {set row(adsbprogram_running) [is_adsb_program_running]}
+    catch {set row(adsbprogram_running) [is_adsb_program_running [receiver_local_port piawareConfig ES]]}
     catch {set row(cputemp) [::fa_sysinfo::cpu_temperature]}
     catch {set row(cpuload) [::fa_sysinfo::cpu_load]}
     catch {set row(uptime) [::fa_sysinfo::uptime]}
@@ -115,7 +115,7 @@ proc location_data_changed {} {
 		return
 	}
 
-	# record the location and maybe restart faup1090 with the new value
+	# record the location and maybe restart necessary programs with the new location
 	lassign $newloc lat lon alt altref
 	update_location $lat $lon
 
@@ -146,8 +146,8 @@ proc adept_location_changed {lat lon alt altref} {
 }
 
 proc connect_to_gpsd {} {
-	::fa_gps::GpsdClient gpsd -callback gps_location_update
-	gpsd connect
+	set ::gpsd [::fa_gps::GpsdClient #auto -callback gps_location_update]
+	$::gpsd connect
 }
 
 # vim: set ts=4 sw=4 sts=4 noet :
