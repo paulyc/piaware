@@ -63,6 +63,19 @@ namespace eval ::fa_piaware_config {
 		return 1
 	}
 
+	proc valid_gain {value} {
+		return [expr {[string is double -strict $value] || $value eq "max"}]
+	}
+
+	proc valid_receiver_type {value} {
+		set supportedReceiverTypes {rtlsdr sdr bladerf beast relay radarcape radarcape-local other none}
+
+		if {$value ni $supportedReceiverTypes } {
+			return 0
+		}
+
+		return 1
+	}
 	# check a value of the given type, return 1 if it looks OK
 	proc validate_typed_value {type value} {
 		switch $type {
@@ -94,6 +107,14 @@ namespace eval ::fa_piaware_config {
 				return [valid_country_code [string toupper [string trim $value]]]
 			}
 
+			"gain" {
+				return [valid_gain [string tolower [string trim $value]]]
+			}
+
+			"receiver" {
+				return [valid_receiver_type [string tolower [string trim $value]]]
+			}
+
 			default {
 				error "unrecognized type: $type"
 			}
@@ -115,12 +136,21 @@ namespace eval ::fa_piaware_config {
 				return [string is true -strict $value]
 			}
 
-			"mac" - "uuid" {
+			"mac" - "uuid" - "receiver" {
 				return [string tolower [string trim $value]]
 			}
 
 			"country" {
 				return [string toupper [string trim $value]]
+			}
+
+			"gain" {
+				set t [string tolower [string trim $value]]
+				if {$t eq "max" || $t == -10} {
+					return "max"
+				} else {
+					return [expr {$value}]
+				}
 			}
 
 			default {
@@ -181,6 +211,20 @@ namespace eval ::fa_piaware_config {
 				return [string toupper [string trim $value]]
 			}
 
+			"gain" {
+				if {![valid_gain $value]} {
+					error "bad gain: $value"
+				}
+				return [string tolower $value]
+			}
+
+			"receiver" {
+				if {![valid_receiver_type $value]} {
+					error "bad receiver type: $value"
+				}
+				return [string tolower $value]
+			}
+
 			default {
 				error "unrecognized type: $type"
 			}
@@ -235,8 +279,8 @@ namespace eval ::fa_piaware_config {
 				error "wrong args: should be \"add_setting key ?-type type? ?-default value? ?-protect 0|1?\""
 			}
 
-			if {$typeName ni {boolean string integer double mac uuid country}} {
-				error "wrong args: -type understands \"boolean\", \"string\", \"double\", \"integer\", \"mac\", \"uuid\", \"country\""
+			if {$typeName ni {boolean string integer double mac uuid country gain receiver}} {
+				error "wrong args: -type understands \"boolean\", \"string\", \"double\", \"integer\", \"mac\", \"uuid\", \"country\", \"gain\", \"receiver\""
 			}
 
 			if {[info exists defaultValue]} {
@@ -988,10 +1032,10 @@ namespace eval ::fa_piaware_config {
 			{"adept-serverport"      -type integer -default 1200}
 
 			{"rfkill"                -type boolean -default no}
-			{"receiver-type"         -default rtlsdr}
+			{"receiver-type"         -type receiver -default rtlsdr}
 			{"rtlsdr-device-index"   -default 0}
 			{"rtlsdr-ppm"            -type integer -default 0}
-			{"rtlsdr-gain"           -type double -default -10}
+			{"rtlsdr-gain"           -type gain -default max}
 			{"beast-baudrate"        -type integer}
 			"radarcape-host"
 			"receiver-host"
@@ -1003,6 +1047,15 @@ namespace eval ::fa_piaware_config {
 			{"mlat-results-format"   -default "beast,connect,localhost:30104 beast,listen,30105 ext_basestation,listen,30106"}
 
 			{"enable-firehose"       -type boolean -default no}
+
+			{"uat-receiver-type"	 -type receiver -default none}
+			{"uat-receiver-host"}
+			{"uat-receiver-port"	 -type integer -default 30978}
+			{"uat-sdr-gain"	         -type gain -default max}
+			{"uat-sdr-ppm"	         -type double -default 0}
+			{"uat-sdr-device"        -default "driver=rtlsdr"}
+
+			{"use-gpsd"              -type boolean -default yes}
 		}
 
 		return [uplevel 1 ::fa_piaware_config::new ::fa_piaware_config::ConfigMetadata [list $name] [list $settings]]

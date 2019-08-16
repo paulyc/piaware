@@ -167,6 +167,12 @@ proc process_netstat_socket_line {line} {
 			}
 		}
 
+		"faup978" {
+			if {$state == "ESTABLISHED"} {
+				set ::netstatus_faup978 1
+			}
+		}
+
 		"piaware" {
 			if {[string match "*:1200" $foreignAddress] && $state == "ESTABLISHED"} {
 				set ::netstatus_piaware 1
@@ -181,6 +187,7 @@ proc process_netstat_socket_line {line} {
 proc inspect_sockets_with_netstat {} {
 	array unset ::netstatus
 	set ::netstatus_faup1090 0
+	set ::netstatus_faup978 0
 	set ::netstatus_piaware 0
 	set ::netstatus_reliable 0
 
@@ -221,9 +228,9 @@ proc warn_once {message args} {
 }
 
 
-# return the local receiver port, or 0 if it is remote
-proc receiver_local_port {config} {
-	lassign [receiver_host_and_port $config] host port
+# return the local receiver port for message type (ES or UAT), or 0 if it is remote
+proc receiver_local_port {config message_type} {
+	lassign [receiver_host_and_port $config $message_type] host port
 	if {$host eq "localhost" || [string match "127.*" $host]} {
 		return $port
 	} else {
@@ -231,40 +238,86 @@ proc receiver_local_port {config} {
 	}
 }
 
-# return the local service name, or "" if unknown
-proc receiver_local_service {config} {
-	switch -- [$config get receiver-type] {
-		rtlsdr     { return "dump1090" }
-		bladerf    { return "dump1090" }
-		beast      { return "beast-splitter" }
-		relay      { return "beast-splitter" }
-		radarcape  { return "beast-splitter" }
-		radarcape-local  { return "" }
-		other      { return "" }
-		default    { error "unknown receiver type configured: [$config get receiver-type]" }
+# return the local service name for message type (ES or UAT), or "" if unknown
+proc receiver_local_service {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			switch -- [$config get receiver-type] {
+				sdr - rtlsdr { return "dump1090" }
+				bladerf    { return "dump1090" }
+				beast      { return "beast-splitter" }
+				relay      { return "beast-splitter" }
+				radarcape  { return "beast-splitter" }
+				radarcape-local  { return "" }
+				other      { return "" }
+				none   	   { return "" }
+				default    { error "unknown receiver type configured: [$config get receiver-type]" }
+			}
+		}
+
+		# 978
+		UAT {
+			switch -- [$config get uat-receiver-type] {
+				sdr - rtlsdr { return "dump978" }
+				none   	   { return "" }
+				default	   { error "unknown UAT receiver type configured: [$config get uat-receiver-type]" }
+			}
+		}
+
+		default {
+			error "invalid message_type supplied"
+		}
 	}
 }
 
 # return a brief description of what we receive data from
-proc receiver_description {config} {
-	switch -- [$config get receiver-type] {
-		rtlsdr - bladerf {
-			return "dump1090"
+proc receiver_description {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			switch -- [$config get receiver-type] {
+				sdr - rtlsdr - bladerf {
+					return "dump1090"
+				}
+				beast {
+					return "the Mode-S Beast serial port"
+				}
+				relay - other {
+					return "the ADS-B data program at [$config get receiver-host]/[$config get receiver-port]"
+				}
+				radarcape {
+					return "the Radarcape at [$config get radarcape-host]"
+				}
+				radarcape-local {
+					return "the local Radarcape"
+				}
+				none {
+					return ""
+				}
+				default {
+					error "unknown receiver type configured: [$config get receiver-type]"
+				}
+			}
 		}
-		beast {
-			return "the Mode-S Beast serial port"
+
+		# 978
+		UAT {
+			switch -- [$config get uat-receiver-type] {
+				sdr {
+					return "dump978"
+				}
+				none {
+					return ""
+				}
+				default {
+					error "unknown UAT receiver type configured: [$config get uat-receiver-type]"
+				}
+			}
 		}
-		relay - other {
-			return "the ADS-B data program at [$config get receiver-host]/[$config get receiver-port]"
-		}
-		radarcape {
-			return "the Radarcape at [$config get radarcape-host]"
-		}
-		radarcape-local {
-			return "the local Radarcape"
-		}
+
 		default {
-			error "unknown receiver type configured: [$config get receiver-type]"
+			error "invalid message type supplied"
 		}
 	}
 }
@@ -272,47 +325,103 @@ proc receiver_description {config} {
 # return the receiver host and port we fetch data from as a list
 # (if we are configured to relay, this returns the relay host/port,
 # not the actual receiver host/port)
-proc receiver_host_and_port {config} {
-	switch -- [$config get receiver-type] {
-		rtlsdr     { return [list localhost 30005] }
-		bladerf    { return [list localhost 30005] }
-		beast      { return [list localhost 30005] }
-		relay      { return [list localhost 30005] }
-		radarcape  { return [list localhost 30005] }
-		radarcape-local  { return [list localhost 10006] }
-		other      { return [list [$config get receiver-host] [$config get receiver-port]] }
-		default    { error "unknown receiver type configured: [$config get receiver-type]" }
+proc receiver_host_and_port {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			switch -- [$config get receiver-type] {
+				sdr - rtlsdr { return [list localhost 30005] }
+				bladerf    { return [list localhost 30005] }
+				beast      { return [list localhost 30005] }
+				relay      { return [list localhost 30005] }
+				radarcape  { return [list localhost 30005] }
+				radarcape-local  { return [list localhost 10006] }
+				other      { return [list [$config get receiver-host] [$config get receiver-port]] }
+				none       { return [list localhost 30005] }
+				default    { error "unknown receiver type configured: [$config get receiver-type]" }
+			}
+		}
+
+		# 978
+		UAT {
+			switch -- [$config get uat-receiver-type] {
+				sdr    	   { return [list localhost 30978] }
+				none       { return [list localhost 30978] }
+				default    { error "unknown UAT receiver type configured [$config get uat-receiver-type]" }
+			}
+		}
+
+		default {
+			error "invalid message_type supplied"
+		}
 	}
 }
 
 # return the underlying receiver host and port as a list
 # (if we are configured to relay, this returns the actual receiver host/port,
 # not the host/port of our relay)
-proc receiver_underlying_host_and_port {config} {
-	switch -- [$config get receiver-type] {
-		rtlsdr     { return [list localhost 30005] }
-		bladerf    { return [list localhost 30005] }
-		beast      { return [list localhost 30005] }
-		relay      { return [list [$config get receiver-host] [$config get receiver-port]] }
-		radarcape  { return [list [$config get radarcape-host] 10003] }
-		radarcape-local  { return [list localhost 10006] }
-		other      { return [list [$config get receiver-host] [$config get receiver-port]] }
-		default    { error "unknown receiver type configured: [$config get receiver-type]" }
+proc receiver_underlying_host_and_port {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			switch -- [$config get receiver-type] {
+				sdr - rtlsdr { return [list localhost 30005] }
+				bladerf    { return [list localhost 30005] }
+				beast      { return [list localhost 30005] }
+				relay      { return [list [$config get receiver-host] [$config get receiver-port]] }
+				radarcape  { return [list [$config get radarcape-host] 10003] }
+				radarcape-local  { return [list localhost 10006] }
+				other      { return [list [$config get receiver-host] [$config get receiver-port]] }
+				none       { return [list localhost 30005] }
+				default    { error "unknown receiver type configured: [$config get receiver-type]" }
+			}
+		}
+
+		# 978
+		UAT {
+			switch -- [$config get uat-receiver-type] {
+				sdr	       { return [list localhost 30978] }
+				none       { return [list localhost 30978] }
+				default	   { error "unknown UAT receiver type configured: [$config get uat-receiver-type]" }
+			}
+		}
+
+		default {
+			error "invalid message_type supplied"
+		}
 	}
 }
 
 # return the data format expected from the receiver
 # (in the form that mlat-client understands)
-proc receiver_data_format {config} {
-	switch -- [$config get receiver-type] {
-		rtlsdr     { return "dump1090" }
-		bladerf    { return "dump1090" }
-		beast      { return "beast" }
-		relay      { return "auto" }
-		radarcape  { return "radarcape" }
-		radarcape-local  { return "radarcape" }
-		other      { return "auto" }
-		default    { error "unknown receiver type configured: [$config get receiver-type]" }
+proc receiver_data_format {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			switch -- [$config get receiver-type] {
+				sdr - rtlsdr { return "dump1090" }
+				bladerf    { return "dump1090" }
+				beast      { return "beast" }
+				relay      { return "auto" }
+				radarcape  { return "radarcape" }
+				radarcape-local  { return "radarcape" }
+				other      { return "auto" }
+				none       { return "auto" }
+				default    { error "unknown receiver type configured: [$config get receiver-type]" }
+			}
+		}
+
+		UAT {
+			switch -- [$config get uat-receiver-type] {
+				sdr	       { return "dump978" }
+				none       { return "auto" }
+				default    { error "Unknown UAT receiver type configured: [$config get uat-receiver-type]" }
+			}
+		}
+
+		default {
+			error "invalid message_type supplied"
+		}
 	}
 }
 

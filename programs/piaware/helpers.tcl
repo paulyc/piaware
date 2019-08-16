@@ -287,6 +287,7 @@ proc shutdown {{reason ""}} {
 #
 proc cleanup_and_exit {} {
 	stop_faup1090
+	stop_faup978
 	disable_mlat
 	remove_pidfile
 	logger "$::argv0 (process [pid]) is exiting..."
@@ -501,6 +502,7 @@ proc reload_config {} {
 	disable_mlat
 	adept reconnect
 	restart_faup1090 now
+	restart_faup978 now
 	stop_pirehose
 	start_pirehose
 }
