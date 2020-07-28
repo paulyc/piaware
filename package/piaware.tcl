@@ -63,7 +63,7 @@ proc query_dpkg_names_and_versions {pattern} {
 # is_pid_running - return 1 if the specified process ID is running, else 0
 #
 proc is_pid_running {pid} {
-    if {[catch {kill -0 $pid} catchResult] == 1} {
+	if {[catch {kill -0 $pid} catchResult] == 1} {
 		switch [lindex $::errorCode 1] {
 			"EPERM" {
 				# we didn't have permission to kill it but that we got this
@@ -80,10 +80,10 @@ proc is_pid_running {pid} {
 				error "is_pid_running unexpectedly got '$catchResult' $::errorCode"
 			}
 		}
-    }
+	}
 	# no error from kill, that means the process exists and we had permissions
 	# to kill it.  whatever, the main point is the process exists
-    return 1
+	return 1
 }
 
 #
@@ -91,18 +91,18 @@ proc is_pid_running {pid} {
 #  file
 #
 proc is_piaware_running {} {
-    if {[catch {set fp [open $::piawarePidFile]}] == 1} {
+	if {[catch {set fp [open $::piawarePidFile]}] == 1} {
 		return 0
-    }
+	}
 
-    gets $fp pid
-    close $fp
+	gets $fp pid
+	close $fp
 
-    if {![string is integer -strict $pid]} {
+	if {![string is integer -strict $pid]} {
 		return 0
-    }
+	}
 
-    return [is_pid_running $pid]
+	return [is_pid_running $pid]
 }
 
 #
@@ -112,18 +112,18 @@ proc is_piaware_running {} {
 # invokes the callback with a 0 for no data received or a 1 for data recv'd
 #
 proc test_port_for_traffic {host port callback {waitSeconds 60}} {
-    if {[catch {set sock [socket $host $port]} catchResult] == 1} {
+	if {[catch {set sock [socket $host $port]} catchResult] == 1} {
 		puts "got '$catchResult'"
 		{*}$callback 0
 		return
-    }
+	}
 
-    fconfigure $sock -buffering none \
+	fconfigure $sock -buffering none \
 		-translation binary \
 		-encoding binary
 
-    set timer [after [expr {$waitSeconds * 1000}] [list test_port_callback "" $sock 0 $callback]]
-    fileevent $sock readable [list test_port_callback $timer $sock 1 $callback]
+	set timer [after [expr {$waitSeconds * 1000}] [list test_port_callback "" $sock 0 $callback]]
+	fileevent $sock readable [list test_port_callback $timer $sock 1 $callback]
 }
 
 #
@@ -131,11 +131,11 @@ proc test_port_for_traffic {host port callback {waitSeconds 60}} {
 #  the timer and close the socket and invoke the callback
 #
 proc test_port_callback {timer sock status callback} {
-    if {$timer != ""} {
+	if {$timer != ""} {
 		catch {after cancel $timer}
-    }
-    catch {close $sock}
-    {*}$callback $status
+	}
+	catch {close $sock}
+	{*}$callback $status
 }
 
 #
@@ -143,7 +143,7 @@ proc test_port_callback {timer sock status callback} {
 #   command
 #
 proc process_netstat_socket_line {line} {
-    lassign $line proto recvq sendq localAddress foreignAddress state pidProg
+	lassign $line proto recvq sendq localAddress foreignAddress state pidProg
 
 	if {$proto ne "tcp" && $proto ne "tcp6"} {
 		return
@@ -158,9 +158,9 @@ proc process_netstat_socket_line {line} {
 
 	if {$state == "LISTEN" && [regexp {(.*):(\d+)} $localAddress -> addr port]} {
 		set ::netstatus($port) [list $prog $pid]
-    }
+	}
 
-    switch $prog {
+	switch $prog {
 		"faup1090" {
 			if {$state == "ESTABLISHED"} {
 				set ::netstatus_faup1090 1
@@ -178,7 +178,7 @@ proc process_netstat_socket_line {line} {
 				set ::netstatus_piaware 1
 			}
 		}
-    }
+	}
 }
 
 #
@@ -219,14 +219,32 @@ proc inspect_sockets_with_netstat {} {
 # warn_once - issue a warning message but only once
 #
 proc warn_once {message args} {
-    if {[info exists ::warnOnceWarnings($message)]} {
+	if {[info exists ::warnOnceWarnings($message)]} {
 		return
-    }
-    set ::warnOnceWarnings($message) ""
+	}
+	set ::warnOnceWarnings($message) ""
 
-    logger "WARNING $message"
+	logger "WARNING $message"
 }
 
+
+# return 1 if the given receiver type is enabled
+proc receiver_enabled {config message_type} {
+	switch -- $message_type {
+		# 1090
+		ES {
+			return [expr {[$config get receiver-type] ne "none"}]
+		}
+
+		UAT {
+			return [expr {[$config get uat-receiver-type] ne "none"}]
+		}
+
+		default {
+			error "invalid message_type supplied"
+		}
+	}
+}
 
 # return the local receiver port for message type (ES or UAT), or 0 if it is remote
 proc receiver_local_port {config message_type} {
@@ -259,8 +277,10 @@ proc receiver_local_service {config message_type} {
 		# 978
 		UAT {
 			switch -- [$config get uat-receiver-type] {
-				sdr - rtlsdr { return "dump978" }
-				none   	   { return "" }
+				sdr        { return "dump978" }
+				stratuxv3  { return "dump978" }
+				other	   { return "" }
+				none	   { return "" }
 				default	   { error "unknown UAT receiver type configured: [$config get uat-receiver-type]" }
 			}
 		}
@@ -304,15 +324,11 @@ proc receiver_description {config message_type} {
 		# 978
 		UAT {
 			switch -- [$config get uat-receiver-type] {
-				sdr {
-					return "dump978"
-				}
-				none {
-					return ""
-				}
-				default {
-					error "unknown UAT receiver type configured: [$config get uat-receiver-type]"
-				}
+				sdr        { return "dump978" }
+				stratuxv3  { return "dump978" }
+				other	   { return "the ADS-B data program at [$config get uat-receiver-host]/[$config get uat-receiver-port]" }
+				none	   { return "" }
+				default	   { error "unknown UAT receiver type configured: [$config get uat-receiver-type]" }
 			}
 		}
 
@@ -337,7 +353,7 @@ proc receiver_host_and_port {config message_type} {
 				radarcape  { return [list localhost 30005] }
 				radarcape-local  { return [list localhost 10006] }
 				other      { return [list [$config get receiver-host] [$config get receiver-port]] }
-				none       { return [list localhost 30005] }
+				none	   { return [list "" ""] }
 				default    { error "unknown receiver type configured: [$config get receiver-type]" }
 			}
 		}
@@ -345,9 +361,11 @@ proc receiver_host_and_port {config message_type} {
 		# 978
 		UAT {
 			switch -- [$config get uat-receiver-type] {
-				sdr    	   { return [list localhost 30978] }
-				none       { return [list localhost 30978] }
-				default    { error "unknown UAT receiver type configured [$config get uat-receiver-type]" }
+				sdr        { return [list localhost 30978] }
+				stratuxv3  { return [list localhost 30978] }
+				other	   { return [list [$config get uat-receiver-host] [$config get uat-receiver-port]] }
+				none	   { return [list "" ""] }
+				default	   { error "unknown UAT receiver type configured [$config get uat-receiver-type]" }
 			}
 		}
 
@@ -372,7 +390,7 @@ proc receiver_underlying_host_and_port {config message_type} {
 				radarcape  { return [list [$config get radarcape-host] 10003] }
 				radarcape-local  { return [list localhost 10006] }
 				other      { return [list [$config get receiver-host] [$config get receiver-port]] }
-				none       { return [list localhost 30005] }
+				none       { return [list "" ""] }
 				default    { error "unknown receiver type configured: [$config get receiver-type]" }
 			}
 		}
@@ -380,8 +398,10 @@ proc receiver_underlying_host_and_port {config message_type} {
 		# 978
 		UAT {
 			switch -- [$config get uat-receiver-type] {
-				sdr	       { return [list localhost 30978] }
-				none       { return [list localhost 30978] }
+				sdr        { return [list localhost 30978] }
+				stratuxv3  { return [list localhost 30978] }
+				other      { return [list [$config get uat-receiver-host] [$config get uat-receiver-port]] }
+				none       { return [list "" ""] }
 				default	   { error "unknown UAT receiver type configured: [$config get uat-receiver-type]" }
 			}
 		}
@@ -406,15 +426,17 @@ proc receiver_data_format {config message_type} {
 				radarcape  { return "radarcape" }
 				radarcape-local  { return "radarcape" }
 				other      { return "auto" }
-				none       { return "auto" }
+				none	   { return "" }
 				default    { error "unknown receiver type configured: [$config get receiver-type]" }
 			}
 		}
 
 		UAT {
 			switch -- [$config get uat-receiver-type] {
-				sdr	       { return "dump978" }
-				none       { return "auto" }
+				sdr        { return "dump978" }
+				stratuxv3  { return "dump978" }
+				other      { return "dump978" }
+				none       { return "" }
 				default    { error "Unknown UAT receiver type configured: [$config get uat-receiver-type]" }
 			}
 		}
